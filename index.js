@@ -37,6 +37,36 @@ async function run() {
     const surveyCollection = client.db("surveyNest").collection("surveys");
     const paymentCollection = client.db("surveyNest").collection("payments");
 
+
+    const verifyToken = (req, res, next) => {
+      console.log("inside verify Token", req.headers.authorization);
+
+      if (!req.headers?.authorization) {
+        return res.status(401).send({ message: "forbidden access" });
+      }
+      const token = req?.headers?.authorization?.split(" ")[1];
+      jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, decoded) => {
+        if (err) {
+          return res.status(401).send({ message: "forbidden access" });
+        }
+        req.decoded = decoded;
+        next();
+      });
+    };
+
+
+    const verifyAdmin = async (req, res, next) => {
+      const email = req?.decoded?.email
+    
+      const query = { email: email };
+      const user = await userCollection.findOne(query);
+      const isAdmin = user?.role === "admin";
+      if (!isAdmin) {
+        return res.status(403).send({ message: "forbidden access" });
+      }
+      next();
+    }
+
     // jwt related api
     app.post("/jwt", async (req, res) => {
       const user = req.body;
@@ -69,7 +99,19 @@ async function run() {
     // survey related api
 
     app.get("/surveys", async (req, res) => {
-      const query = {status: true};
+      const query = {status: 'Published'};
+      const cursor = surveyCollection.find(query);
+      const surveys = await cursor.toArray();
+      res.send(surveys);
+    })
+
+    app.get("/survey/mysurvey/:email", verifyToken, async (req, res) => {
+      const tokenEmail = req.decoded.email
+      const email = req.params.email;
+      if(tokenEmail !== email){
+        return res.status(403).send({message: 'forbidden access'})
+      }
+      const query = {email:  email};
       const cursor = surveyCollection.find(query);
       const surveys = await cursor.toArray();
       res.send(surveys);
@@ -87,6 +129,20 @@ async function run() {
       
       const query = { _id: new ObjectId(id) };
       const survey = await surveyCollection.findOne(query);
+      res.send(survey);
+    })
+
+    app.patch("/surveys/:id", async (req, res) => {
+      const id = req.params.id;
+      console.log(id, req.body)
+      const query = { _id: new ObjectId(id) };
+      const option = {
+        upsert: true
+      }
+      const updatedDoc = {
+        $set: req.body,
+      }
+      const survey = await surveyCollection.updateOne(query, updatedDoc, option);
       res.send(survey);
     })
 
@@ -118,33 +174,9 @@ async function run() {
       res.send(result);
     })
 
-    const verifyToken = (req, res, next) => {
-      console.log("inside verify Token", req.headers.authorization);
 
-      if (!req.headers?.authorization) {
-        return res.status(401).send({ message: "forbidden access" });
-      }
-      const token = req?.headers?.authorization?.split(" ")[1];
-      jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, decoded) => {
-        if (err) {
-          return res.status(401).send({ message: "forbidden access" });
-        }
-        req.decoded = decoded;
-        next();
-      });
-    };
 
-    const verifyAdmin = async (req, res, next) => {
-      const email = req?.decoded?.email
-    
-      const query = { email: email };
-      const user = await userCollection.findOne(query);
-      const isAdmin = user?.role === "admin";
-      if (!isAdmin) {
-        return res.status(403).send({ message: "forbidden access" });
-      }
-      next();
-    }
+
 
 
     // user related Api
