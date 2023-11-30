@@ -69,7 +69,14 @@ async function run() {
     // survey related api
 
     app.get("/surveys", async (req, res) => {
-      // const query = {};
+      const query = {status: true};
+      const cursor = surveyCollection.find(query);
+      const surveys = await cursor.toArray();
+      res.send(surveys);
+    })
+
+    app.get("/surveys/admin", async (req, res) => {
+    
       const cursor = surveyCollection.find();
       const surveys = await cursor.toArray();
       res.send(surveys);
