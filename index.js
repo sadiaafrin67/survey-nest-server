@@ -71,7 +71,7 @@ async function run() {
       const user = req.body;
 
       const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, {
-        expiresIn: "1h",
+        expiresIn: "5h",
       });
       console.log("jwt", token);
       res.send({ token });
@@ -448,6 +448,7 @@ async function run() {
       res.send(result);
     });
 
+    // for dislike
     app.patch("/dislike/:id", async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) };
