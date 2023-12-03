@@ -162,74 +162,55 @@ async function run() {
     app.put("/updateSurvey/:id", async (req, res) => {
       const id = req.params.id;
       const { email, votedIn, name } = req.body;
-      // survey.timestamp = moment().format("MMMM Do YYYY, h:mm:ss a");
-      console.log(req.body);
-
-      // Initialize updatedQuery to an empty object
-      let updatedQuery = {};
 
       try {
         const survey = await surveyCollection.findOne({
           _id: new ObjectId(id),
         });
-        console.log(survey, "167");
 
-        if (survey) {
-          if (votedIn === "yes" && survey.yesVote < 1 && survey.noVote < 1) {
-            updatedQuery = {
-              $push: {
-                votedUser: {
-                  email,
-                  votedIn,
-                  time: moment().format("MMMM Do YYYY, h:mm:ss a"),
-                  name,
-                },
-              },
-              $inc: {
-                voted: 1,
-                yesVote: 1,
-              },
-            };
-          } else if (
-            votedIn === "no" &&
-            survey.noVote < 1 &&
-            survey.yesVote < 1
-          ) {
-            updatedQuery = {
-              $push: {
-                votedUser: {
-                  email,
-                  votedIn,
-                  name,
-                  time: moment().format("MMMM Do YYYY, h:mm:ss a"),
-                },
-              },
-              $inc: {
-                voted: 1,
-                noVote: 1,
-              },
-            };
-          } else {
-            // Add custom validation for when the user has already voted
-            let errorMessage = "";
-            if (votedIn === "yes" && survey.yesVote >= 1) {
-              errorMessage = "You have already voted 'yes'";
-            } else if (votedIn === "no" && survey.noVote >= 1) {
-              errorMessage = "You have already voted 'no'";
-            }
+        if (!survey) {
+          return res
+            .status(404)
+            .send({ success: false, message: "Survey not found" });
+        }
+
+        if (survey?.votedUser) {
+          const hasVoted = survey.votedUser.some(
+            (user) => user.email === email
+          );
+
+          if (hasVoted) {
             return res
               .status(400)
-              .send({ success: false, message: errorMessage });
+              .send({ success: false, message: "You have already voted" });
           }
-
-          const result = await surveyCollection.updateOne(
-            { _id: new ObjectId(id) },
-            updatedQuery
-          );
-          res.send(result);
-        } else {
-          res.status(404).send({ success: false, message: "Survey not found" });
         }
+
+        const updatedQuery = {
+          $push: {
+            votedUser: {
+              email,
+              votedIn,
+              time: moment().format("MMMM Do YYYY, h:mm:ss a"),
+              name,
+            },
+          },
+          $inc: {
+            voted: 1,
+            [`${votedIn}Vote`]: 1,
+          },
+        };
+
+        const result = await surveyCollection.updateOne(
+          { _id: new ObjectId(id) },
+          updatedQuery
+        );
+
+        return res.send({
+          success: true,
+          message: "You have voted successfully",
+          result,
+        });
       } catch (error) {
         console.error("Error updating survey:", error);
         res
