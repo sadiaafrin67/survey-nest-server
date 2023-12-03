@@ -37,6 +37,7 @@ async function run() {
     const userCollection = client.db("surveyNest").collection("users");
     const surveyCollection = client.db("surveyNest").collection("surveys");
     const paymentCollection = client.db("surveyNest").collection("payments");
+    const responseCollection = client.db("surveyNest").collection("responses");
 
     const verifyToken = (req, res, next) => {
       console.log("inside verify Token", req.headers.authorization);
@@ -158,74 +159,67 @@ async function run() {
       res.send(survey);
     });
 
-    // app.put("/updateSurvey/:id", async (req, res) => {
-    //   const id = req.params.id;
-    //   const { email, votedIn } = req.body;
-    //   console.log(req.body);
-    //   const survey = await surveyCollection.findOne({ _id: new ObjectId(id) });
-    //   let updatedQuery;
-    //   if (survey) {
-    //     if (survey.votedUser) {
-    //       updatedQuery = {
-    //         $push: { votedUser: { email, votedIn } },
-    //         $inc: {
-    //           voted: 1,
-    //         },
-    //       };
-    //     } else {
-    //       updatedQuery = {
-    //         $set: { votedUser: [{ email, votedIn }] },
-    //         $inc: {
-    //           voted: 1,
-    //         },
-    //       };
-    //     }
-    //   }
-    //   const result = await surveyCollection.updateOne(
-    //     { _id: new ObjectId(id) },
-    //     updatedQuery
-    //   );
-    //   res.send(result);
-    // });
-
     app.put("/updateSurvey/:id", async (req, res) => {
-      try {
-        const id = req.params.id;
-        const { email, votedIn } = req.body;
+      const id = req.params.id;
+      const { email, votedIn, name } = req.body;
+      // survey.timestamp = moment().format("MMMM Do YYYY, h:mm:ss a");
+      console.log(req.body);
 
-        // Check if the survey with the specified id exists
+      // Initialize updatedQuery to an empty object
+      let updatedQuery = {};
+
+      try {
         const survey = await surveyCollection.findOne({
           _id: new ObjectId(id),
         });
-
-        let updatedQuery;
+        console.log(survey, "167");
 
         if (survey) {
-          if (survey.votedUser) {
-            // Check if the email already exists in the 'votedUser' array
-            const emailExists = survey.votedUser.some(
-              (vote) => vote.email === email
-            );
-
-            if (emailExists) {
-              // If the email already exists, send a response
-              res
-                .status(400)
-                .send({ success: false, message: "Already voted" });
-              return;
-            } else {
-              // If the email doesn't exist, push the new vote into the 'votedUser' array
-              updatedQuery = {
-                $push: { votedUser: { email, votedIn } },
-                $inc: { voted: 1 },
-              };
-            }
-          } else {
-            // If the 'votedUser' array doesn't exist, create a new one with the new vote
+          if (votedIn === "yes" && survey.yesVote < 1 && survey.noVote < 1) {
             updatedQuery = {
-              $set: { votedUser: [{ email, votedIn }] },
-              $inc: { voted: 1 },
+              $push: {
+                votedUser: {
+                  email,
+                  votedIn,
+                  time: moment().format("MMMM Do YYYY, h:mm:ss a"),
+                  name,
+                },
+              },
+              $inc: {
+                voted: 1,
+                yesVote: 1,
+              },
             };
+          } else if (
+            votedIn === "no" &&
+            survey.noVote < 1 &&
+            survey.yesVote < 1
+          ) {
+            updatedQuery = {
+              $push: {
+                votedUser: {
+                  email,
+                  votedIn,
+                  name,
+                  time: moment().format("MMMM Do YYYY, h:mm:ss a"),
+                },
+              },
+              $inc: {
+                voted: 1,
+                noVote: 1,
+              },
+            };
+          } else {
+            // Add custom validation for when the user has already voted
+            let errorMessage = "";
+            if (votedIn === "yes" && survey.yesVote >= 1) {
+              errorMessage = "You have already voted 'yes'";
+            } else if (votedIn === "no" && survey.noVote >= 1) {
+              errorMessage = "You have already voted 'no'";
+            }
+            return res
+              .status(400)
+              .send({ success: false, message: errorMessage });
           }
 
           const result = await surveyCollection.updateOne(
@@ -234,17 +228,74 @@ async function run() {
           );
           res.send(result);
         } else {
-          // If the survey doesn't exist, handle accordingly (send an error response)
           res.status(404).send({ success: false, message: "Survey not found" });
         }
       } catch (error) {
-        // Handle errors gracefully
-        console.error("Error updating survey votedUser:", error);
+        console.error("Error updating survey:", error);
         res
           .status(500)
           .send({ success: false, message: "Internal server error" });
       }
     });
+
+    // app.put("/updateSurvey/:id", async (req, res) => {
+    //   try {
+    //     const id = req.params.id;
+    //     const { email, votedIn } = req.body;
+    //     console.log(email, votedIn, "196");
+
+    //     // Check if the survey with the specified id exists
+    //     const survey = await surveyCollection.findOne({
+    //       _id: new ObjectId(id),
+    //     });
+
+    //     let updatedQuery;
+
+    //     if (survey) {
+    //       if (survey.votedUser) {
+    //         // Check if the email already exists in the 'votedUser' array
+    //         const emailExists = survey.votedUser.some(
+    //           (vote) => vote.email === email
+    //         );
+
+    //         if (emailExists) {
+    //           // If the email already exists, send a response
+    //           res
+    //             .status(400)
+    //             .send({ success: false, message: "Already voted" });
+    //           return;
+    //         } else {
+    //           // If the email doesn't exist, push the new vote into the 'votedUser' array
+    //           updatedQuery = {
+    //             $push: { votedUser: { email, votedIn } },
+    //             $inc: { voted: 1 },
+    //           };
+    //         }
+    //       } else {
+    //         // If the 'votedUser' array doesn't exist, create a new one with the new vote
+    //         updatedQuery = {
+    //           $set: { votedUser: [{ email, votedIn }] },
+    //           $inc: { voted: 1 },
+    //         };
+    //       }
+
+    //       const result = await surveyCollection.updateOne(
+    //         { _id: new ObjectId(id) },
+    //         updatedQuery
+    //       );
+    //       res.send(result);
+    //     } else {
+    //       // If the survey doesn't exist, handle accordingly (send an error response)
+    //       res.status(404).send({ success: false, message: "Survey not found" });
+    //     }
+    //   } catch (error) {
+    //     // Handle errors gracefully
+    //     console.error("Error updating survey votedUser:", error);
+    //     res
+    //       .status(500)
+    //       .send({ success: false, message: "Internal server error" });
+    //   }
+    // });
 
     app.patch("/surveys/:id", verifyToken, async (req, res) => {
       const id = req.params.id;
@@ -320,12 +371,10 @@ async function run() {
 
             if (emailExists) {
               // If the email already exists in the 'report' array, return a message
-              res
-                .status(400)
-                .send({
-                  success: false,
-                  message: "Report already exists for this email",
-                });
+              res.status(400).send({
+                success: false,
+                message: "Report already exists for this email",
+              });
             } else {
               // If the email doesn't exist, push the new report into the 'report' array
               const updatedDoc = {
@@ -384,28 +433,18 @@ async function run() {
               (comment) => comment.email === email
             );
 
-            if (emailExists) {
-              // If the email already exists in the 'report' array, return a message
-              res
-                .status(400)
-                .send({
-                  success: false,
-                  message: "comment already exists for this email",
-                });
-            } else {
-              // If the email doesn't exist, push the new report into the 'report' array
-              const updatedDoc = {
-                $push: { comment: { email, message } },
-              };
-              await surveyCollection.updateOne(
-                { _id: new ObjectId(id) },
-                updatedDoc
-              );
-              res.send({
-                success: true,
-                message: "Comment added successfully",
-              });
-            }
+            // If the email doesn't exist, push the new report into the 'report' array
+            const updatedDoc = {
+              $push: { comment: { email, message } },
+            };
+            await surveyCollection.updateOne(
+              { _id: new ObjectId(id) },
+              updatedDoc
+            );
+            res.send({
+              success: true,
+              message: "Comment added successfully",
+            });
           } else {
             // If the 'report' array doesn't exist, create a new one with the new report
             const updatedDoc = {
@@ -482,9 +521,8 @@ async function run() {
         admin = user?.role;
       } else if (user?.role === "surveyor") {
         surveyor = user?.role;
-      }
-      else if(user?.role === 'Pro User'){
-        prouser = user?.role
+      } else if (user?.role === "Pro User") {
+        prouser = user?.role;
       }
 
       console.log("admin ?", admin);
